@@ -1,0 +1,16 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "PLCrashReporter",
+        "repositoryURL": "https://github.com/OK-mobile/PLCrashReporter.git",
+        "state": {
+          "branch": "plcrashreporter_ok",
+          "revision": "1add90659fd9be2185420294541ef86c218a122b",
+          "version": null
+        }
+      }
+    ]
+  },
+  "version": 1
+}

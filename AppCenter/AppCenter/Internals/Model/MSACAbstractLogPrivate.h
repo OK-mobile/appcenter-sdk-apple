@@ -9,6 +9,7 @@ static NSString *const kMSACSId = @"sid";
 static NSString *const kMSACType = @"type";
 static NSString *const kMSACTimestamp = @"timestamp";
 static NSString *const kMSACUserId = @"userId";
+static NSString *const kOKTTAssertAppSecret = @"kOKTTAssertAppSecret";
 
 @interface MSACAbstractLog ()
 

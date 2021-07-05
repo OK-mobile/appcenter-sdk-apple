@@ -9,6 +9,7 @@
 #import "MSACHttpIngestionPrivate.h"
 #import "MSACLoggerInternal.h"
 #import "MSACUtility+StringFormatting.h"
+#import "MSACLogContainer.h"
 
 // URL components' name within a partial URL.
 static NSString *const kMSACPartialURLComponentsName[] = {@"scheme", @"user", @"password", @"host", @"port", @"path"};
@@ -180,28 +181,74 @@ static NSString *const kMSACPartialURLComponentsName[] = {@"scheme", @"user", @"
                  eTag:(nullable NSString *)eTag
                callId:(NSString *)callId
     completionHandler:(MSACSendAsyncCompletionHandler)handler {
-  @synchronized(self) {
-    if (!self.isEnabled) {
-      MSACLogWarning([MSACAppCenter logTag], @"%@ is disabled.", NSStringFromClass([self class]));
-      NSError *error = [NSError errorWithDomain:kMSACACErrorDomain
-                                           code:MSACACDisabledErrorCode
-                                       userInfo:@{NSLocalizedDescriptionKey : kMSACACDisabledErrorDesc}];
-      handler(callId, nil, nil, error);
-      return;
+    @synchronized(self) {
+        if (!self.isEnabled) {
+            MSACLogWarning([MSACAppCenter logTag], @"%@ is disabled.", NSStringFromClass([self class]));
+            NSError *error = [NSError errorWithDomain:kMSACACErrorDomain
+                                                 code:MSACACDisabledErrorCode
+                                             userInfo:@{NSLocalizedDescriptionKey : kMSACACDisabledErrorDesc}];
+            handler(callId, nil, nil, error);
+            return;
+        }
+
+        NSObject *mainPayloadData = data;
+        NSDictionary *mainPayloadHttpHeaders = [self getHeadersWithData:mainPayloadData eTag:eTag];
+
+        if ([mainPayloadData isKindOfClass:MSACLogContainer.class]) {
+            MSACLogContainer *container = (MSACLogContainer *)mainPayloadData;
+            NSMutableArray <id <MSACLog> > *assertLogs = [NSMutableArray array];
+            NSMutableArray <id <MSACLog> > *regularLogs = [NSMutableArray array];
+
+            for (id<MSACLog> log in container.logs) {
+                if (log.assertAppSecret != nil) {
+                    [assertLogs addObject:log];
+                } else {
+                    [regularLogs addObject:log];
+                }
+            }
+
+            if (assertLogs.count > 0) {
+                NSString *assertAppSecret = assertLogs.firstObject.assertAppSecret;
+
+                if (regularLogs.count == 0) {
+                    //just override app secret if no regular logs in batch
+                    mainPayloadHttpHeaders = [self oktt_overridenAppSecretHeaders:mainPayloadHttpHeaders appSecret:assertAppSecret];
+                } else {
+                    //separate app secrets for regular logs
+                    mainPayloadData = [[MSACLogContainer alloc] initWithBatchId:container.batchId
+                                                                        andLogs:regularLogs.copy];
+                    //and assert logs
+                    MSACLogContainer *assertContainer = [[MSACLogContainer alloc] initWithBatchId:MSAC_UUID_STRING
+                                                                                          andLogs:assertLogs.copy];
+
+                    NSDictionary *assertHttpHeaders = [self getHeadersWithData:assertContainer eTag:nil];
+                    assertHttpHeaders = [self oktt_overridenAppSecretHeaders:assertHttpHeaders appSecret:assertAppSecret];
+                    NSData *assertPayload = [self getPayloadWithData:assertContainer];
+                    [self.httpClient sendAsync:self.sendURL
+                                        method:[self getHttpMethod]
+                                       headers:assertHttpHeaders
+                                          data:assertPayload
+                                retryIntervals:self.callsRetryIntervals
+                            compressionEnabled:YES
+                             completionHandler:^(NSData *_Nullable responseBody, NSHTTPURLResponse *_Nullable response, NSError *_Nullable error) {
+                        [self printResponse:response body:responseBody error:error];
+                    }];
+                }
+            }
+        }
+
+        NSData *payload = [self getPayloadWithData:mainPayloadData];
+        [self.httpClient sendAsync:self.sendURL
+                            method:[self getHttpMethod]
+                           headers:mainPayloadHttpHeaders
+                              data:payload
+                    retryIntervals:self.callsRetryIntervals
+                compressionEnabled:YES
+                 completionHandler:^(NSData *_Nullable responseBody, NSHTTPURLResponse *_Nullable response, NSError *_Nullable error) {
+            [self printResponse:response body:responseBody error:error];
+            handler(callId, response, responseBody, error);
+        }];
     }
-    NSDictionary *httpHeaders = [self getHeadersWithData:data eTag:eTag];
-    NSData *payload = [self getPayloadWithData:data];
-    [self.httpClient sendAsync:self.sendURL
-                        method:[self getHttpMethod]
-                       headers:httpHeaders
-                          data:payload
-                retryIntervals:self.callsRetryIntervals
-            compressionEnabled:YES
-             completionHandler:^(NSData *_Nullable responseBody, NSHTTPURLResponse *_Nullable response, NSError *_Nullable error) {
-               [self printResponse:response body:responseBody error:error];
-               handler(callId, response, responseBody, error);
-             }];
-  }
 }
 
 #pragma mark - Printing
@@ -241,6 +288,12 @@ static NSString *const kMSACPartialURLComponentsName[] = {@"scheme", @"user", @"
     }
   }
   return nil;
+}
+
+- (NSDictionary *)oktt_overridenAppSecretHeaders:(NSDictionary *)headers appSecret:(NSString *)appSecret {
+  NSMutableDictionary *httpHeaders = [headers mutableCopy];
+  [httpHeaders setValue:appSecret forKey:kMSACHeaderAppSecretKey];
+  return httpHeaders;
 }
 
 @end

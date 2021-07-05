@@ -33,6 +33,7 @@ static NSString *const kMSACAppNamespacePrefix = @"I";
 @synthesize userId = _userId;
 @synthesize device = _device;
 @synthesize tag = _tag;
+@synthesize assertAppSecret = _assertAppSecret;
 
 - (instancetype)init {
   self = [super init];
@@ -94,6 +95,7 @@ static NSString *const kMSACAppNamespacePrefix = @"I";
     _distributionGroupId = [coder decodeObjectForKey:kMSACDistributionGroupId];
     _userId = [coder decodeObjectForKey:kMSACUserId];
     _device = [coder decodeObjectForKey:kMSACDevice];
+    _assertAppSecret = [coder decodeObjectForKey:kOKTTAssertAppSecret];
   }
   return self;
 }
@@ -105,6 +107,9 @@ static NSString *const kMSACAppNamespacePrefix = @"I";
   [coder encodeObject:self.distributionGroupId forKey:kMSACDistributionGroupId];
   [coder encodeObject:self.userId forKey:kMSACUserId];
   [coder encodeObject:self.device forKey:kMSACDevice];
+  if (self.assertAppSecret.length > 0) {
+    [coder encodeObject:self.assertAppSecret forKey:kOKTTAssertAppSecret];
+  }
 }
 
 #pragma mark - Utility

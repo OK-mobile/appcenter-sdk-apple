@@ -9,4 +9,5 @@
 	url = https://github.com/hamcrest/OCHamcrest.git
 [submodule "Vendor/PLCrashReporter"]
 	path = Vendor/PLCrashReporter
-	url = https://github.com/microsoft/plcrashreporter
+	url = https://github.com/OK-mobile/plcrashreporter.git
+	branch = plcrashreporter_ok

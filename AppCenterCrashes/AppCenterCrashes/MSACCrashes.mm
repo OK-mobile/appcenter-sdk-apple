@@ -69,6 +69,8 @@ static NSString *const kMSACLogBufferFileExtension = @"mscrasheslogbuffer";
 
 static NSString *const kMSACTargetTokenFileExtension = @"targettoken";
 
+static NSString *const kOKTTAssertFilePrefix = @"OKTTAssert";
+
 static unsigned int kMaxAttachmentSize = 7 * 1024 * 1024;
 
 /**
@@ -199,6 +201,9 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
  */
 @property dispatch_source_t memoryPressureSource;
 
+@property (nonatomic, nullable) NSString *assertAppSecret;
+@property (nonatomic, nullable, weak) id <MSOKTTAssertReportsDelegate> assertReportDelegate;
+
 @end
 
 @implementation MSACCrashes
@@ -282,6 +287,35 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
 
 + (void)setDelegate:(id<MSACCrashesDelegate>)delegate {
   [[MSACCrashes sharedInstance] setDelegate:delegate];
+}
+
++ (void)setOKTTAssertReportDelegate:(_Nullable id<MSOKTTAssertReportsDelegate>)delegate {
+  [[MSACCrashes sharedInstance] setAssertReportDelegate:delegate];
+}
+
++ (void)generateTestAssertReport {
+  NSData *report = [[self liveReportGenerator] generateLiveReport];
+  [self sendAssertLiveReport:report];
+}
+
++ (void)overrideAppSecretForAsserts:(NSString *)assertAppSecret {
+  [MSACCrashes sharedInstance].assertAppSecret = assertAppSecret;
+}
+
++ (void)sendAssertLiveReport:(NSData *)assertReportData {
+  [[MSACCrashes sharedInstance] sendAssertReport:assertReportData];
+}
+
++ (id <OKTTMSLiveReportGenerator>)liveReportGenerator {
+  PLCrashReporter *crashReporter = [[MSACCrashes sharedInstance] plCrashReporter];
+  if ([crashReporter respondsToSelector:@selector(generateLiveReport)] &&
+      [crashReporter respondsToSelector:@selector(generateLiveReportWithException:)]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wold-style-cast"
+     return (id <OKTTMSLiveReportGenerator>)crashReporter;
+#pragma clang diagnostic pop
+  }
+  return nil;
 }
 
 #pragma mark - Service initialization
@@ -638,45 +672,87 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
 }
 
 - (void)channel:(id<MSACChannelProtocol>)__unused channel willSendLog:(id<MSACLog>)log {
-  id<MSACCrashesDelegate> delegate = self.delegate;
-  if ([delegate respondsToSelector:@selector(crashes:willSendErrorReport:)]) {
-    NSObject *logObject = static_cast<NSObject *>(log);
-    if ([logObject isKindOfClass:[MSACAppleErrorLog class]]) {
-      MSACAppleErrorLog *appleErrorLog = static_cast<MSACAppleErrorLog *>(log);
-      MSACErrorReport *report = [MSACErrorLogFormatter errorReportFromLog:appleErrorLog];
-      [MSACDispatcherUtil performBlockOnMainThread:^{
-        [delegate crashes:self willSendErrorReport:report];
-      }];
+    if (log.assertAppSecret != nil) {
+        id<MSOKTTAssertReportsDelegate> delegate = self.assertReportDelegate;
+        if ([delegate respondsToSelector:@selector(crashes:willSendOKTTAssertReport:)]) {
+            NSObject *logObject = static_cast<NSObject *>(log);
+            if ([logObject isKindOfClass:[MSACAppleErrorLog class]]) {
+                MSACAppleErrorLog *appleErrorLog = static_cast<MSACAppleErrorLog *>(log);
+                MSACErrorReport *report = [MSACErrorLogFormatter errorReportFromLog:appleErrorLog];
+                [MSACDispatcherUtil performBlockOnMainThread:^{
+                    [delegate crashes:self willSendOKTTAssertReport:report];
+                }];
+            }
+        }
+    } else {
+        id<MSACCrashesDelegate> delegate = self.delegate;
+        if ([delegate respondsToSelector:@selector(crashes:willSendErrorReport:)]) {
+            NSObject *logObject = static_cast<NSObject *>(log);
+            if ([logObject isKindOfClass:[MSACAppleErrorLog class]]) {
+                MSACAppleErrorLog *appleErrorLog = static_cast<MSACAppleErrorLog *>(log);
+                MSACErrorReport *report = [MSACErrorLogFormatter errorReportFromLog:appleErrorLog];
+                [MSACDispatcherUtil performBlockOnMainThread:^{
+                    [delegate crashes:self willSendErrorReport:report];
+                }];
+            }
+        }
     }
-  }
 }
 
 - (void)channel:(id<MSACChannelProtocol>)__unused channel didSucceedSendingLog:(id<MSACLog>)log {
-  id<MSACCrashesDelegate> delegate = self.delegate;
-  if ([delegate respondsToSelector:@selector(crashes:didSucceedSendingErrorReport:)]) {
-    NSObject *logObject = static_cast<NSObject *>(log);
-    if ([logObject isKindOfClass:[MSACAppleErrorLog class]]) {
-      MSACAppleErrorLog *appleErrorLog = static_cast<MSACAppleErrorLog *>(log);
-      MSACErrorReport *report = [MSACErrorLogFormatter errorReportFromLog:appleErrorLog];
-      [MSACDispatcherUtil performBlockOnMainThread:^{
-        [delegate crashes:self didSucceedSendingErrorReport:report];
-      }];
+    if (log.assertAppSecret != nil) {
+        id<MSOKTTAssertReportsDelegate> delegate = self.assertReportDelegate;
+        if ([delegate respondsToSelector:@selector(crashes:didSucceedSendingOKTTAssertReport:)]) {
+            NSObject *logObject = static_cast<NSObject *>(log);
+            if ([logObject isKindOfClass:[MSACAppleErrorLog class]]) {
+                MSACAppleErrorLog *appleErrorLog = static_cast<MSACAppleErrorLog *>(log);
+                MSACErrorReport *report = [MSACErrorLogFormatter errorReportFromLog:appleErrorLog];
+                [MSACDispatcherUtil performBlockOnMainThread:^{
+                    [delegate crashes:self didSucceedSendingOKTTAssertReport:report];
+                }];
+            }
+        }
+    } else {
+        id<MSACCrashesDelegate> delegate = self.delegate;
+        if ([delegate respondsToSelector:@selector(crashes:didSucceedSendingErrorReport:)]) {
+            NSObject *logObject = static_cast<NSObject *>(log);
+            if ([logObject isKindOfClass:[MSACAppleErrorLog class]]) {
+                MSACAppleErrorLog *appleErrorLog = static_cast<MSACAppleErrorLog *>(log);
+                MSACErrorReport *report = [MSACErrorLogFormatter errorReportFromLog:appleErrorLog];
+                [MSACDispatcherUtil performBlockOnMainThread:^{
+                    [delegate crashes:self didSucceedSendingErrorReport:report];
+                }];
+            }
+        }
     }
-  }
 }
 
 - (void)channel:(id<MSACChannelProtocol>)__unused channel didFailSendingLog:(id<MSACLog>)log withError:(nullable NSError *)error {
-  id<MSACCrashesDelegate> delegate = self.delegate;
-  if ([delegate respondsToSelector:@selector(crashes:didFailSendingErrorReport:withError:)]) {
-    NSObject *logObject = static_cast<NSObject *>(log);
-    if ([logObject isKindOfClass:[MSACAppleErrorLog class]]) {
-      MSACAppleErrorLog *appleErrorLog = static_cast<MSACAppleErrorLog *>(log);
-      MSACErrorReport *report = [MSACErrorLogFormatter errorReportFromLog:appleErrorLog];
-      [MSACDispatcherUtil performBlockOnMainThread:^{
-        [delegate crashes:self didFailSendingErrorReport:report withError:error];
-      }];
+    if (log.assertAppSecret != nil) {
+        id<MSOKTTAssertReportsDelegate> delegate = self.assertReportDelegate;
+        if ([delegate respondsToSelector:@selector(crashes:didFailSendingOKTTAssertReport:withError:)]) {
+            NSObject *logObject = static_cast<NSObject *>(log);
+            if ([logObject isKindOfClass:[MSACAppleErrorLog class]]) {
+                MSACAppleErrorLog *appleErrorLog = static_cast<MSACAppleErrorLog *>(log);
+                MSACErrorReport *report = [MSACErrorLogFormatter errorReportFromLog:appleErrorLog];
+                [MSACDispatcherUtil performBlockOnMainThread:^{
+                    [delegate crashes:self didFailSendingOKTTAssertReport:report withError:error];
+                }];
+            }
+        }
+    } else {
+        id<MSACCrashesDelegate> delegate = self.delegate;
+        if ([delegate respondsToSelector:@selector(crashes:didFailSendingErrorReport:withError:)]) {
+            NSObject *logObject = static_cast<NSObject *>(log);
+            if ([logObject isKindOfClass:[MSACAppleErrorLog class]]) {
+                MSACAppleErrorLog *appleErrorLog = static_cast<MSACAppleErrorLog *>(log);
+                MSACErrorReport *report = [MSACErrorLogFormatter errorReportFromLog:appleErrorLog];
+                [MSACDispatcherUtil performBlockOnMainThread:^{
+                    [delegate crashes:self didFailSendingErrorReport:report withError:error];
+                }];
+            }
+        }
     }
-  }
 }
 
 #pragma mark - Crash reporter configuration
@@ -848,7 +924,8 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
     PLCrashReport *report = foundCrashReports[fileURL];
     MSACErrorReport *errorReport = foundErrorReports[fileURL];
     MSACAppleErrorLog *log = [MSACErrorLogFormatter errorLogFromCrashReport:report];
-    if (!self.automaticProcessingEnabled || [self shouldProcessErrorReport:errorReport]) {
+      BOOL isAssertReport = [self _isAssertFileURL:fileURL];
+    if (!self.automaticProcessingEnabled || [self shouldProcessErrorReport:errorReport isAssertReport:isAssertReport]) {
       if (!self.automaticProcessingEnabled) {
         MSACLogDebug([MSACCrashes logTag], @"Automatic crash processing is disabled, storing the crash report for later processing: %@",
                      report.debugDescription);
@@ -1180,9 +1257,21 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
 }
 
 - (BOOL)shouldProcessErrorReport:(MSACErrorReport *)errorReport {
-  id<MSACCrashesDelegate> delegate = self.delegate;
-  if ([delegate respondsToSelector:@selector(crashes:shouldProcessErrorReport:)]) {
-    return [delegate crashes:self shouldProcessErrorReport:errorReport];
+    return [self shouldProcessErrorReport:errorReport isAssertReport:NO];
+}
+
+- (BOOL)shouldProcessErrorReport:(MSACErrorReport *)errorReport isAssertReport:(BOOL)isAssertReport {
+  if (isAssertReport) {
+    id<MSOKTTAssertReportsDelegate> delegate = self.assertReportDelegate;
+    if ([delegate respondsToSelector:@selector(crashes:shouldProcessOKTTAssertReport:)]) {
+      return [delegate crashes:self shouldProcessOKTTAssertReport:errorReport];
+    }
+  } else {
+      id<MSACCrashesDelegate> delegate = self.delegate;
+      if ([delegate respondsToSelector:@selector(crashes:shouldProcessErrorReport:)]) {
+        return [delegate crashes:self shouldProcessErrorReport:errorReport];
+      }
+      return YES;
   }
   return YES;
 }
@@ -1267,8 +1356,6 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
 }
 
 - (void)handleUserConfirmation:(MSACUserConfirmation)userConfirmation {
-  NSArray<MSACErrorAttachmentLog *> *attachments;
-
   // Check for user confirmation.
   if (userConfirmation == MSACUserConfirmationDontSend) {
 
@@ -1301,19 +1388,8 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
     NSURL *fileURL = self.unprocessedFilePaths[i];
 
     // Get error attachments.
-    id<MSACCrashesDelegate> delegate = self.delegate;
-    if ([delegate respondsToSelector:@selector(attachmentsWithCrashes:forErrorReport:)]) {
-      attachments = [delegate attachmentsWithCrashes:self forErrorReport:report];
-
-      // Use the device information from the error log, otherwise the current device information will be used.
-      for (MSACErrorAttachmentLog *attachment in attachments) {
-        if (attachment != nil && attachment.device == nil) {
-          attachment.device = log.device;
-        }
-      }
-    } else {
-      MSACLogDebug([MSACCrashes logTag], @"attachmentsWithCrashes is not implemented");
-    }
+    BOOL isAssertReport = [self _isAssertFileURL:fileURL];
+    NSArray<MSACErrorAttachmentLog *> *attachments = [self _attachmentsForReport:report log:log isAssertReport:isAssertReport];
 
     // First, get correlated session Id.
     log.sid = [[MSACSessionContext sharedInstance] sessionIdAt:log.timestamp];
@@ -1326,6 +1402,14 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
 
     // Send error attachments.
     [self sendErrorAttachments:attachments withIncidentIdentifier:report.incidentIdentifier];
+
+    if (isAssertReport) {
+      log.assertAppSecret = self.assertAppSecret;
+
+      for (MSACErrorAttachmentLog *attachment in attachments) {
+         attachment.assertAppSecret = self.assertAppSecret;
+      }
+    }
 
     // Clean up.
     [self deleteCrashReportWithFileURL:fileURL];
@@ -1406,6 +1490,55 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
                                      appErrorTime:[NSDate date]
                                            device:[[MSACDeviceTracker sharedInstance] device]
                              appProcessIdentifier:0];
+}
+
+- (void)sendAssertReport:(NSData *)assertReportData {
+    if (assertReportData == nil || !self.isEnabled) {
+        return;
+    }
+
+    NSString *cacheFilename = [NSString stringWithFormat:@"%@-%@", kOKTTAssertFilePrefix, MSAC_UUID_STRING];
+    NSString *filePath = [NSString stringWithFormat:@"%@/%@", self.crashesPathComponent, cacheFilename];
+    [MSACUtility createFileAtPathComponent:filePath withData:assertReportData atomically:YES forceOverwrite:NO];
+}
+
+- (BOOL)_isAssertFileURL:(NSURL *)url {
+  return [url.lastPathComponent hasPrefix:kOKTTAssertFilePrefix];
+}
+
+- (NSArray <MSACErrorAttachmentLog *> *)_attachmentsForReport:(MSACErrorReport *)report log:(MSACAppleErrorLog *)log isAssertReport:(BOOL)isAssertReport {
+    NSArray <MSACErrorAttachmentLog *> *attachments = nil;
+    if (isAssertReport) {
+        id <MSOKTTAssertReportsDelegate> delegate = self.assertReportDelegate;
+        if ([delegate respondsToSelector:@selector(attachmentsWithCrashes:forOKTTAssertReport:)]) {
+            attachments = [delegate attachmentsWithCrashes:self forOKTTAssertReport:report];
+
+            // Use the device information from the error log, otherwise the current device information will be used.
+            for (MSACErrorAttachmentLog *attachment in attachments) {
+                if (attachment != nil && attachment.device == nil) {
+                    attachment.device = log.device;
+                }
+            }
+        } else {
+            MSACLogDebug([MSACCrashes logTag], @"attachmentsWithCrashes is not implemented");
+        }
+    } else {
+        // Get error attachments.
+        id<MSACCrashesDelegate> delegate = self.delegate;
+        if ([delegate respondsToSelector:@selector(attachmentsWithCrashes:forErrorReport:)]) {
+            attachments = [delegate attachmentsWithCrashes:self forErrorReport:report];
+
+            // Use the device information from the error log, otherwise the current device information will be used.
+            for (MSACErrorAttachmentLog *attachment in attachments) {
+                if (attachment != nil && attachment.device == nil) {
+                    attachment.device = log.device;
+                }
+            }
+        } else {
+            MSACLogDebug([MSACCrashes logTag], @"attachmentsWithCrashes is not implemented");
+        }
+    }
+    return attachments;
 }
 
 @end
