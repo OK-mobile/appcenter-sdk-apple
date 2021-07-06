@@ -169,6 +169,11 @@ NS_SWIFT_NAME(Crashes)
 @property(class, nonatomic, weak) id<MSACCrashesDelegate> _Nullable delegate;
 
 /**
+ * Delegate only for assert reports logs
+ */
+@property(class, nonatomic, weak) id<MSOKTTAssertReportsDelegate> _Nullable assertReportDelegate;
+
+/**
  * Set a user confirmation handler that is invoked right before processing crash reports to determine whether sending crash reports or not.
  *
  * @see MSACUserConfirmationHandler
@@ -185,11 +190,6 @@ NS_SWIFT_NAME(Crashes)
 + (void)notifyWithUserConfirmation:(MSACUserConfirmation)userConfirmation;
 
 #pragma mark - Assert reporting
-
-/**
- * Delegate only for assert reports logs
- */
-+ (void)setOKTTAssertReportDelegate:(_Nullable id<MSOKTTAssertReportsDelegate>)delegate;
 
 /**
  * Will be grouped by single selector

@@ -202,7 +202,7 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
 @property dispatch_source_t memoryPressureSource;
 
 @property (nonatomic, nullable) NSString *assertAppSecret;
-@property (nonatomic, nullable, weak) id <MSOKTTAssertReportsDelegate> assertReportDelegate;
+@property (nonatomic, weak) id <MSOKTTAssertReportsDelegate> assertReportDelegate;
 
 @end
 
@@ -289,7 +289,11 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
   [[MSACCrashes sharedInstance] setDelegate:delegate];
 }
 
-+ (void)setOKTTAssertReportDelegate:(_Nullable id<MSOKTTAssertReportsDelegate>)delegate {
++ (id<MSOKTTAssertReportsDelegate>)assertReportDelegate {
+    return [MSACCrashes sharedInstance].assertReportDelegate;
+}
+
++ (void)setAssertReportDelegate:(id<MSOKTTAssertReportsDelegate>)delegate {
   [[MSACCrashes sharedInstance] setAssertReportDelegate:delegate];
 }
 
