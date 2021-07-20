@@ -1401,12 +1401,6 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
     // Second, get correlated user Id.
     log.userId = [[MSACUserIdContext sharedInstance] userIdAt:log.timestamp];
 
-    // Then, enqueue crash log.
-    [self.channelUnit enqueueItem:log flags:MSACFlagsCritical];
-
-    // Send error attachments.
-    [self sendErrorAttachments:attachments withIncidentIdentifier:report.incidentIdentifier];
-
     if (isAssertReport) {
       log.assertAppSecret = self.assertAppSecret;
 
@@ -1414,6 +1408,12 @@ __attribute__((noreturn)) static void uncaught_cxx_exception_handler(const MSACC
          attachment.assertAppSecret = self.assertAppSecret;
       }
     }
+
+    // Then, enqueue crash log.
+    [self.channelUnit enqueueItem:log flags:MSACFlagsCritical];
+
+    // Send error attachments.
+    [self sendErrorAttachments:attachments withIncidentIdentifier:report.incidentIdentifier];
 
     // Clean up.
     [self deleteCrashReportWithFileURL:fileURL];
